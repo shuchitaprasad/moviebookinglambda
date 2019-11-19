@@ -1,11 +1,7 @@
 """
 This sample demonstrates an implementation of the Lex Code Hook Interface
-in order to serve a sample bot which manages orders for flowers.
-Bot, Intent, and Slot models which are compatible with this sample can be found in the Lex Console
-as part of the 'OrderFlowers' template.
+in order to serve a sample bot which manages booking of movie tickets.
 
-For instructions on how to set up and test this bot, as well as additional samples,
-visit the Lex Getting Started documentation http://docs.aws.amazon.com/lex/latest/dg/getting-started.html.
 """
 import math
 import dateutil.parser
@@ -95,7 +91,8 @@ def isvalid_date(date):
         return False
 
 
-def createCategoryMap(movienamesList):
+# Create a map with movie name as key and slots with prices as  values
+def createmovielookupmap(movienamesList):
     logger.debug("Creating Category Map {}".format(movienamesList))
     moviesLookup = {}
 
@@ -109,43 +106,65 @@ def createCategoryMap(movienamesList):
 
 def validate_movie_tickets_input(intent_request):
     sessionAttributes = intent_request['sessionAttributes'] if intent_request['sessionAttributes'] is not None else {}
+    # fetch all the slot values
     bookingDate = get_slots(intent_request)["bookingDate"]
     movieName = get_slots(intent_request)["movieName"]
     bookingSlot = get_slots(intent_request)["bookingSlot"]
     numbrOfTickets = get_slots(intent_request)['numbrOfTickets']
     customername = get_slots(intent_request)['customerName']
-    if bookingDate is not None:
+
+    # validation for booking date not null
+    if bookingDate is None:
+        "-- if the user has not selected any movie --"
+        return build_validation_result(False, 'bookingDate', 'PlainText', 'Please specify the date of booking', None)
+
+    else:
+        # validation for invalid booking date
         if not isvalid_date(bookingDate):
             return build_validation_result(False, 'bookingDate', 'PlainText',
-                                           'I did not understand that, what date would you like to book the tickets for?')
-        elif datetime.datetime.strptime(bookingDate, '%Y-%m-%d').date() <= datetime.date.today():
-            return build_validation_result(False, 'bookingDate', 'PlainText', 'Booking date cannot be of the past')
-    "-- if the user has not selected any movie --"
+                                           'I did not understand that, what date would you like to book the tickets '
+                                           'for?', None)
+        elif datetime.datetime.strptime(bookingDate, '%Y-%m-%d').date() < datetime.date.today():
+            return build_validation_result(False, 'bookingDate', 'PlainText', 'Booking date cannot be of the past',
+                                           None)
+    "-- fetch movie name by api call/ being fetch from ahrd coded JSON --"
     if movieName is None:
         moviedetailslist = movielist.fetchMovieList();
 
-        category_lookup = createCategoryMap(moviedetailslist)
+        movie_lookup = createmovielookupmap(moviedetailslist)
         movienamesonly = []
         for moviedetails in moviedetailslist:
             movienamesonly.append(moviedetails['name'])
 
-        return build_validation_result(False, 'movieName', 'CustomPayload', json.dumps(moviedetailslist),
-                                       json.dumps(category_lookup))
+        return build_validation_result(False, 'movieName', 'PlainText',
+                                       'Please choose from the given movies ' + ','.join(movienamesonly),
+                                       json.dumps(movie_lookup))
 
-    "-- if the user has  selected  movie, it is present in the list of movies which the  user was shown to--"
+        # return build_validation_result(False, 'movieName', 'CustomPayload', json.dumps(moviedetailslist),
+        # json.dumps(movie_lookup))
 
     if bookingSlot is None:
-
+        "-- if the user has  selected  movie, it should be present in the list of movies which the  user was shown to--"
         if sessionAttributes.get('moviedetails_lookup', None) is None:
-            return build_validation_result(False, 'movieName', 'PlainText', 'Please enter movie name from the list only',
-         None)
-
+            return build_validation_result(False, 'movieName', 'PlainText',
+                                           'Please enter movie name from the list only',
+                                           None)
+        # fetch the slot details based on movie selected
         else:
-            moviedetails_lookup = sessionAttributes['moviedetails_lookup']
+
+            time_slots = []
+            # convert the session attribute string to dictionary/map
+            moviedetails_lookup = eval(sessionAttributes['moviedetails_lookup'])
+
+            logger.debug("SELECTED MOVIE :: {}".format(moviedetails_lookup.get(movieName)))
+
             """---find the booking slot as per the movie selected----"""
-            slotDetails = moviedetails_lookup[movieName['slotDetails']]
-            return build_validation_result(False, 'bookingSlot', 'CustomPayload', json.dumps(slotDetails),
-                                       None)
+            for slot in moviedetails_lookup.get(movieName):
+                time_slots.append(slot['slots'])
+            return build_validation_result(False, 'bookingSlot', 'PlainText',
+                                           'Please select from  the available slots for the movie ' + ','.join(
+                                               time_slots),
+                                           None)
 
     else:
         if len(bookingSlot) != 5:
@@ -159,13 +178,6 @@ def validate_movie_tickets_input(intent_request):
             # Not a valid time; use a prompt defined on the build-time model.
             return build_validation_result(False, 'bookingSlot', 'PlainText', 'Not a valid time', None)
 
-        if hour < 10 or hour > 16:
-            # Outside of business hours
-            return build_validation_result(False, 'bookingSlot', 'PlainText'
-                                                                 'Our business hours are from ten a m. to five p m. '
-                                                                 'Can you specify a time during this range?',
-                                           None)
-
     if customername is None:
         return build_validation_result(False, 'customerName', 'PlainText', 'Please specify the name against which the '
                                                                            'booking needs to be done', None)
@@ -174,9 +186,7 @@ def validate_movie_tickets_input(intent_request):
         return build_validation_result(False, 'numbrOfTickets', 'PlainText', 'Please specify the number of tickets '
                                                                              'required', None)
 
-
     return build_validation_result(True, None, None, None, None)
-
 
 
 """ --- Functions that control the bot's behavior --- """
@@ -210,6 +220,7 @@ def book_movie_tickets(intent_request):
                                    slots,
                                    validation_result['violatedSlot'],
                                    validation_result['message'])
+            # nothing in session attributes
             else:
                 slots[validation_result['violatedSlot']] = None
                 if validation_result['violatedSlot'] == 'movieName':
@@ -221,14 +232,11 @@ def book_movie_tickets(intent_request):
                                    validation_result['violatedSlot'],
                                    validation_result['message'])
 
-
-
-
     return close(intent_request['sessionAttributes'],
                  'Fulfilled',
                  {'contentType': 'PlainText',
                   'content': 'Thanks, your {} ticket for {} has been booked for date {} and slot {} against name {}'.format(
-                      numbrOfTickets, movieName, bookingDate, bookingSlot,customername)})
+                      numbrOfTickets, movieName, bookingDate, bookingSlot, customername)})
 
 
 """ --- Intents --- """
