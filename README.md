@@ -14,3 +14,5 @@ createmovielookupmap - the method which creates map where movie name is key and 
 elicit_slot -- ensures, Ellicit Slot stage is ensures.
 
 close- ensures fullfillment state
+
+movielist.py has hard coded JSON which should be replaced by api call.
