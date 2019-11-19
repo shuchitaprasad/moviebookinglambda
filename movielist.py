@@ -1,4 +1,6 @@
 
+import json
+import os
 import logging
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -11,11 +13,11 @@ def fetchMovieList():
     'name': 'Mangal Mission',
     'slotDetails': [
       {
-        'slots': '10 -12',
+        'slots': '9am',
         'price': '500'
       },
       {
-        'slots': '12 -2',
+        'slots': '1pm',
         'price': '700'
       }
     ]
@@ -24,11 +26,11 @@ def fetchMovieList():
     'name': 'WAR',
     'slotDetails': [
       {
-        'slots': '10 -12',
+        'slots': '10pm',
         'price': '400'
       },
       {
-        'slots': '12 -2',
+        'slots': '12pm',
         'price': '600'
       }
     ]
